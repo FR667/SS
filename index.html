@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FRX 雲端讀書軟體</title>
+    <title>史蒂夫雲端讀書軟體</title>
+    <link rel="icon" type="image/jpeg" href="https://i.ibb.co/TDGvppJb/IMG-1685.jpg">
+
     <!-- Chart.js 數據視覺化 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- CryptoJS 安全雜湊演算法 -->
@@ -500,6 +502,15 @@
             border: 1px solid rgba(129, 140, 248, 0.4);
         }
 
+        .chat-img {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 6px;
+            display: block;
+            cursor: pointer;
+        }
+
         /* 筆記雙欄 */
         .note-workspace {
             display: grid;
@@ -643,21 +654,6 @@
             gap: 16px;
         }
 
-        .history-table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-            font-size: 0.9rem;
-        }
-
-        .history-table th, .history-table td {
-            padding: 12px;
-            border-bottom: 1px solid var(--glass-border);
-            white-space: nowrap;
-        }
-
-        .history-table th { color: var(--text-sub); }
-
         .badges-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -711,10 +707,10 @@
     <!-- 登入與註冊全螢幕對話框 -->
     <div class="auth-screen" id="authScreen">
         <div class="glass-panel auth-box">
-            <h2 style="color: var(--accent);" id="authTitle">🚀 歡迎來到 FRX 雲端讀書軟體</h2>
+            <h2 style="color: var(--accent);" id="authTitle">🚀 歡迎來到 史蒂夫 雲端讀書軟體</h2>
             <p style="font-size: 0.85rem; color: var(--text-sub);" id="authSubtitle">請登入帳號或註冊新帳號以同步雲端伺服器</p>
             
-            <div id="authAvatarPreviewContainer" style="display: flex; justify-content: center; margin: 4px 0;">
+            <div id="authAvatarPreviewContainer" style="display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 4px 0;">
                 <img id="authAvatarPreview" src="https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent);">
             </div>
 
@@ -725,9 +721,9 @@
                 <label style="font-size: 0.82rem; color: var(--text-sub);">密碼：</label>
                 <input type="password" id="authPasswordInput" placeholder="輸入密碼...">
 
-                <div id="registerExtraFields" style="display: none; flex-direction: column; gap: 10px;">
-                    <label style="font-size: 0.82rem; color: var(--text-sub);">頭像圖片網址 (URL)：</label>
-                    <input type="text" id="authAvatarUrlInput" placeholder="https://... 或上傳圖片" value="https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg" oninput="document.getElementById('authAvatarPreview').src=this.value">
+                <div id="registerExtraFields" style="display: none; flex-direction: column; gap: 6px;">
+                    <label style="font-size: 0.82rem; color: var(--text-sub);">上傳頭像圖片：</label>
+                    <input type="file" id="authAvatarFileInput" accept="image/*" onchange="previewAuthAvatar(this)" style="font-size: 0.85rem; padding: 6px;">
                 </div>
             </div>
 
@@ -753,7 +749,7 @@
 
     <header class="mobile-header">
         <button class="mobile-menu-btn" onclick="toggleDrawer(true)">☰</button>
-        <div class="brand-title" style="font-size: 1.1rem;">FRX 讀書軟體</div>
+        <div class="brand-title" style="font-size: 1.1rem;">史蒂夫讀書軟體</div>
         <div style="width: 24px;"></div>
     </header>
 
@@ -869,12 +865,15 @@
             <!-- 2. 🌐 連線讀書伺服器 -->
             <section id="server" class="view-section">
                 <div class="glass-panel" style="padding: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
                         <div>
                             <h3>🌐 Firebase 連線讀書伺服器</h3>
                             <p style="font-size: 0.85rem; color: var(--text-sub);">即時查看線上正在努力讀書的夥伴與狀態！</p>
                         </div>
-                        <button onclick="updateOnlineStatusToServer()" style="background: #10b981; font-size: 0.85rem;">🔄 重新整理狀態</button>
+                        <div style="background: rgba(16, 185, 129, 0.2); border: 1px solid #34d399; padding: 8px 16px; border-radius: 12px; text-align: center;">
+                            <div style="font-size: 0.75rem; color: #a7f3d0;">🔥 本伺服器總專注時長</div>
+                            <div id="serverTotalTimeDisplay" style="font-size: 1.2rem; font-weight: bold; color: #34d399;">0 分鐘</div>
+                        </div>
                     </div>
                     <div class="server-grid" id="onlineServerUsersGrid">
                         <!-- 動態載入在線使用者 -->
@@ -886,11 +885,13 @@
             <section id="chat" class="view-section">
                 <div class="glass-panel" style="padding: 20px;">
                     <h3>💬 雲端讀書聊天室</h3>
-                    <p style="font-size: 0.82rem; color: var(--text-sub); margin-bottom: 12px;">與全伺服器的同學即時交流、互相鼓勵！</p>
+                    <p style="font-size: 0.82rem; color: var(--text-sub); margin-bottom: 12px;">與全伺服器的同學即時交流、互相鼓勵，支援圖片傳送！</p>
                     
                     <div class="chat-box-container">
                         <div class="chat-messages-scroll" id="chatMessagesContainer"></div>
-                        <div style="display: flex; gap: 8px; padding: 12px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--glass-border);">
+                        <div style="display: flex; gap: 8px; padding: 12px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--glass-border); align-items: center;">
+                            <input type="file" id="chatImageInput" accept="image/*" style="display: none;" onchange="sendChatImage(this)">
+                            <button onclick="document.getElementById('chatImageInput').click()" style="background: rgba(255,255,255,0.15); padding: 10px 14px;" title="上傳圖片">🖼️</button>
                             <input type="text" id="chatInput" placeholder="輸入訊息跟大家打招呼..." style="flex: 1;" onkeypress="if(event.key==='Enter') sendChatMessage()">
                             <button onclick="sendChatMessage()">送出</button>
                         </div>
@@ -1063,12 +1064,12 @@
                     <!-- 自訂個人檔案 -->
                     <div class="glass-panel" style="padding: 20px; grid-column: 1 / -1;">
                         <h3>👤 自訂個人檔案與頭像</h3>
-                        <p style="font-size: 0.82rem; color: var(--text-sub); margin-bottom: 12px;">可完整依照個人需求自訂名稱、頭像與自訂外觀。</p>
+                        <p style="font-size: 0.82rem; color: var(--text-sub); margin-bottom: 12px;">可完整依照個人需求自訂名稱與上傳頭像檔案。</p>
                         <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
                             <img id="profileEditAvatarPreview" src="https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg" style="width: 75px; height: 75px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent);">
                             <div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 220px;">
                                 <input type="text" id="profileUsernameInput" placeholder="修改用戶名稱...">
-                                <input type="text" id="profileAvatarUrlInput" placeholder="輸入頭像圖片網址 (URL)..." oninput="document.getElementById('profileEditAvatarPreview').src=this.value">
+                                <input type="file" id="profileAvatarFileInput" accept="image/*" onchange="previewProfileAvatar(this)" style="font-size: 0.85rem; padding: 6px;">
                                 <button onclick="saveProfileChanges()" style="background: #10b981;">儲存個人檔案</button>
                             </div>
                         </div>
@@ -1139,6 +1140,8 @@
         /* ===== 系統資料狀態 ===== */
         let currentUser = JSON.parse(localStorage.getItem('frx_current_user')) || null;
         let isRegisterMode = false;
+        let tempAuthAvatarBase64 = 'https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg';
+        let tempProfileAvatarBase64 = '';
 
         let appState = {
             passwordHash: localStorage.getItem('aura_password_hash') || '',
@@ -1209,11 +1212,33 @@
 
             if (currentUser) {
                 initFirebaseListeners();
-                updateOnlineStatusToServer();
+                updateOnlineStatusToServer('線上待命 ☕');
             }
         };
 
-        /* ===== 🔐 登入與註冊系統 ===== */
+        /* ===== 🔐 登入與註冊系統 (支援圖片上傳) ===== */
+        function previewAuthAvatar(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    tempAuthAvatarBase64 = e.target.result;
+                    document.getElementById('authAvatarPreview').src = tempAuthAvatarBase64;
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function previewProfileAvatar(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    tempProfileAvatarBase64 = e.target.result;
+                    document.getElementById('profileEditAvatarPreview').src = tempProfileAvatarBase64;
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
         function checkAuthStatus() {
             if (!currentUser) {
                 document.getElementById('authScreen').style.display = 'flex';
@@ -1222,15 +1247,15 @@
                 document.getElementById('sidebarUsername').innerText = currentUser.username;
                 document.getElementById('sidebarUserAvatar').src = currentUser.avatar || 'https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg';
                 document.getElementById('profileUsernameInput').value = currentUser.username;
-                document.getElementById('profileAvatarUrlInput').value = currentUser.avatar || '';
                 document.getElementById('profileEditAvatarPreview').src = currentUser.avatar || 'https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg';
+                tempProfileAvatarBase64 = currentUser.avatar;
             }
         }
 
         function toggleAuthMode() {
             isRegisterMode = !isRegisterMode;
             document.getElementById('authTitle').innerText = isRegisterMode ? '📝 註冊 FRX 新帳號' : '🚀 歡迎來到 FRX 雲端讀書軟體';
-            document.getElementById('authSubtitle').innerText = isRegisterMode ? '輸入用戶名稱與密碼即可快速建立帳號' : '請登入帳號或註冊新帳號以同步雲端伺服器';
+            document.getElementById('authSubtitle').innerText = isRegisterMode ? '上傳頭像並輸入名稱與密碼即可快速建立帳號' : '請登入帳號或註冊新帳號以同步雲端伺服器';
             document.getElementById('authSubmitBtn').innerText = isRegisterMode ? '立即註冊' : '立即登入';
             document.getElementById('registerExtraFields').style.display = isRegisterMode ? 'flex' : 'none';
             document.getElementById('authModeSwitchText').innerText = isRegisterMode ? '已有帳號？點此返回登入' : '沒有帳號？點此註冊新帳號';
@@ -1240,7 +1265,7 @@
         function handleAuthSubmit() {
             const username = document.getElementById('authUsernameInput').value.trim();
             const password = document.getElementById('authPasswordInput').value.trim();
-            const avatarUrl = document.getElementById('authAvatarUrlInput').value.trim() || 'https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg';
+            const avatar = isRegisterMode ? tempAuthAvatarBase64 : 'https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg';
             const msgEl = document.getElementById('authMsg');
 
             if (!username || !password) {
@@ -1258,7 +1283,7 @@
                         msgEl.innerText = '⚠️ 此用戶名稱已被註冊，請更換名稱！';
                         return;
                     }
-                    const newUser = { username, password: hashedPassword, avatar: avatarUrl };
+                    const newUser = { username, password: hashedPassword, avatar };
                     userRef.set(newUser);
                     currentUser = newUser;
                     localStorage.setItem('frx_current_user', JSON.stringify(currentUser));
@@ -1289,11 +1314,10 @@
 
         function saveProfileChanges() {
             const newName = document.getElementById('profileUsernameInput').value.trim();
-            const newAvatar = document.getElementById('profileAvatarUrlInput').value.trim();
             if(!newName) { alert('用戶名稱不能為空！'); return; }
 
             currentUser.username = newName;
-            currentUser.avatar = newAvatar || currentUser.avatar;
+            currentUser.avatar = tempProfileAvatarBase64 || currentUser.avatar;
             localStorage.setItem('frx_current_user', JSON.stringify(currentUser));
             rtdb.ref('users/' + currentUser.username).set(currentUser);
             updateOnlineStatusToServer();
@@ -1301,27 +1325,35 @@
             checkAuthStatus();
         }
 
-        /* ===== 🌐 Firebase 連線讀書伺服器與聊天室 ===== */
+        /* ===== 🌐 Firebase 連線讀書伺服器與聊天室 (含即時總時長與圖片) ===== */
         function initFirebaseListeners() {
-            // 監聽線上讀書伺服器成員
+            // 監聽線上讀書伺服器成員與時間、科目狀態
             rtdb.ref('online_users').on('value', (snapshot) => {
                 const users = snapshot.val() || {};
                 const grid = document.getElementById('onlineServerUsersGrid');
                 if(!grid) return;
                 grid.innerHTML = '';
 
+                let totalServerMins = 0;
+
                 Object.values(users).forEach(u => {
+                    const durationMins = u.studyMins || 0;
+                    totalServerMins += durationMins;
                     grid.innerHTML += `
                         <div class="server-user-card">
                             <img src="${u.avatar || 'https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg'}" class="server-avatar">
                             <div style="flex: 1; overflow: hidden;">
                                 <div style="font-weight: bold; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${u.username}</div>
-                                <div style="font-size: 0.78rem; color: #34d399;">科目：${u.subject || '自習'}</div>
+                                <div style="font-size: 0.78rem; color: #34d399;">📚 科目：${u.subject || '自習'}</div>
+                                <div style="font-size: 0.78rem; color: #fbbf24;">⏱️ 讀書時間：${durationMins} 分鐘</div>
                                 <div style="font-size: 0.75rem; color: var(--text-sub);">狀態：${u.status || '專注中'}</div>
                             </div>
                         </div>
                     `;
                 });
+
+                // 更新伺服器總專注時長
+                document.getElementById('serverTotalTimeDisplay').innerText = `${totalServerMins} 分鐘`;
             });
 
             // 監聽聊天室
@@ -1333,10 +1365,14 @@
 
                 Object.values(msgs).forEach(m => {
                     const isMine = m.username === currentUser.username;
+                    let contentHtml = `<div style="font-size: 0.9rem;">${m.text || ''}</div>`;
+                    if (m.imageUrl) {
+                        contentHtml += `<img src="${m.imageUrl}" class="chat-img" onclick="window.open(this.src)">`;
+                    }
                     chatContainer.innerHTML += `
                         <div class="chat-msg-item ${isMine ? 'mine' : ''}">
                             <div style="font-size: 0.75rem; color: var(--accent); font-weight: bold; margin-bottom: 2px;">${m.username}</div>
-                            <div style="font-size: 0.9rem;">${m.text}</div>
+                            ${contentHtml}
                         </div>
                     `;
                 });
@@ -1344,15 +1380,18 @@
             });
         }
 
-        function updateOnlineStatusToServer(statusText = '專注讀書中 ⏱️') {
+        function updateOnlineStatusToServer(statusText = '專注讀書中 🔥') {
             if(!currentUser) return;
             const subject = document.getElementById('timerSubjectDropdown')?.value || '綜合自習';
+            const totalMyMins = appState.sessions.reduce((acc, s) => acc + s.duration, 0);
+            
             const statusRef = rtdb.ref('online_users/' + currentUser.username);
             statusRef.set({
                 username: currentUser.username,
                 avatar: currentUser.avatar,
                 subject: subject,
                 status: statusText,
+                studyMins: totalMyMins,
                 lastActive: Date.now()
             });
         }
@@ -1368,6 +1407,22 @@
                 timestamp: Date.now()
             });
             input.value = '';
+        }
+
+        function sendChatImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    rtdb.ref('chat_messages').push({
+                        username: currentUser.username,
+                        text: '傳送了一張圖片 🖼️',
+                        imageUrl: e.target.result,
+                        timestamp: Date.now()
+                    });
+                    input.value = '';
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
         }
 
         /* ===== 導覽與基本功能函式 ===== */
@@ -1401,7 +1456,7 @@
             }
         }
 
-        /* ===== 計時器與遊戲化核心 ===== */
+        /* ===== 計時器與遊戲化核心 (自動加入與隨時儲存) ===== */
         function switchTimerMode(mode) {
             timerMode = mode;
             resetTimer();
@@ -1420,8 +1475,8 @@
         function toggleTimer() {
             if (!isRunning) {
                 isRunning = true;
-                sessionStartTime = new Date();
                 document.getElementById('startTimerBtn').innerText = '暫停專注';
+                // 用戶在首頁按下開始按鈕時，自動加入讀書伺服器並更新狀態
                 updateOnlineStatusToServer('專注衝刺中 🔥');
 
                 timerId = setInterval(() => {
@@ -1485,10 +1540,12 @@
                 tag: noteTag || '專注研讀'
             });
 
+            // 隨時儲存個人讀書時長至 localStorage 與 Firebase 伺服器
             localStorage.setItem('aura_sessions', JSON.stringify(appState.sessions));
             addGamifyXP(mins);
             renderDashboard();
-            alert(`✅ 成功記錄專注 ${mins} 分鐘！獲得經驗值與金幣！`);
+            updateOnlineStatusToServer('專注讀書中 ⏱️');
+            alert(`✅ 成功記錄專注 ${mins} 分鐘！已同步至雲端伺服器！`);
         }
 
         /* ===== 遊戲化與統計 ===== */
