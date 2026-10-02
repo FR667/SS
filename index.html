@@ -444,7 +444,7 @@
         /* 線上讀書伺服器成員列表格 */
         .server-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
             gap: 14px;
             margin-top: 10px;
         }
@@ -825,8 +825,7 @@
 
                     <div class="timer-btn-group">
                         <button id="startTimerBtn" onclick="toggleTimer()">開始專注</button>
-                        <button id="stopwatchSaveBtn" onclick="stopAndSaveStopwatch()" style="display:none; background:#10b981;">結束並記錄</button>
-                        <button onclick="resetTimer()" style="background: rgba(255,255,255,0.15);">重設</button>
+                        <button onclick="resetTimer()" style="background: rgba(255,255,255,0.15);">重設 / 結算</button>
                         <button onclick="toggleZenMode()" style="background: rgba(255,255,255,0.15);">🧘 全螢幕</button>
                     </div>
 
@@ -1181,6 +1180,7 @@
         let isBreakMode = false;
         let timeLeft = appState.focusMins * 60;
         let stopwatchSeconds = 0;
+        let sessionStartTime = null; // 用於即時計算並自動存檔
         let activeNoteId = appState.notes[0]?.id || null;
         let isSplitScreen = true;
         let flashcardList = [];
@@ -1325,27 +1325,37 @@
             checkAuthStatus();
         }
 
-        /* ===== 🌐 Firebase 連線讀書伺服器與聊天室 (含即時總時長與圖片) ===== */
+        /* ===== 🌐 Firebase 連線讀書伺服器與聊天室 (即時天/小時/分鐘/秒與離線過濾) ===== */
         function initFirebaseListeners() {
-            // 監聽線上讀書伺服器成員與時間、科目狀態
+            // 監聽線上讀書伺服器成員與即時時間
             rtdb.ref('online_users').on('value', (snapshot) => {
                 const users = snapshot.val() || {};
                 const grid = document.getElementById('onlineServerUsersGrid');
                 if(!grid) return;
                 grid.innerHTML = '';
 
-                let totalServerMins = 0;
+                let totalServerSeconds = 0;
+                const now = Date.now();
 
                 Object.values(users).forEach(u => {
-                    const durationMins = u.studyMins || 0;
-                    totalServerMins += durationMins;
+                    // 若超過 45 秒未發送心跳/活動，視為離線不予顯示
+                    if (now - (u.lastActive || 0) > 45000) return;
+
+                    let runningSecs = u.activeSeconds || 0;
+                    if (u.isStudying && u.sessionStartTime) {
+                        runningSecs += Math.floor((now - u.sessionStartTime) / 1000);
+                    }
+                    totalServerSeconds += runningSecs;
+
+                    const timeFormatted = formatSecondsToDHMS(runningSecs);
+
                     grid.innerHTML += `
                         <div class="server-user-card">
                             <img src="${u.avatar || 'https://i.ibb.co/S448R48W/601c6d40-e9b2-4630-af2c-3710fb257eb1.jpg'}" class="server-avatar">
                             <div style="flex: 1; overflow: hidden;">
                                 <div style="font-weight: bold; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${u.username}</div>
                                 <div style="font-size: 0.78rem; color: #34d399;">📚 科目：${u.subject || '自習'}</div>
-                                <div style="font-size: 0.78rem; color: #fbbf24;">⏱️ 讀書時間：${durationMins} 分鐘</div>
+                                <div style="font-size: 0.78rem; color: #fbbf24; font-family: monospace;">⏱️ ${timeFormatted}</div>
                                 <div style="font-size: 0.75rem; color: var(--text-sub);">狀態：${u.status || '專注中'}</div>
                             </div>
                         </div>
@@ -1353,7 +1363,8 @@
                 });
 
                 // 更新伺服器總專注時長
-                document.getElementById('serverTotalTimeDisplay').innerText = `${totalServerMins} 分鐘`;
+                const totalMinsServer = Math.floor(totalServerSeconds / 60);
+                document.getElementById('serverTotalTimeDisplay').innerText = `${totalMinsServer} 分鐘`;
             });
 
             // 監聽聊天室
@@ -1380,10 +1391,22 @@
             });
         }
 
-        function updateOnlineStatusToServer(statusText = '專注讀書中 🔥') {
+        function formatSecondsToDHMS(totalSeconds) {
+            const days = Math.floor(totalSeconds / 86400);
+            const hours = Math.floor((totalSeconds % 86400) / 3600);
+            const mins = Math.floor((totalSeconds % 3600) / 60);
+            const secs = totalSeconds % 60;
+            let str = '';
+            if (days > 0) str += `${days}天 `;
+            if (days > 0 || hours > 0) str += `${hours}小時 `;
+            str += `${mins}分 ${secs}秒`;
+            return str;
+        }
+
+        function updateOnlineStatusToServer(statusText = '專注讀書中 🔥', isStudying = false) {
             if(!currentUser) return;
             const subject = document.getElementById('timerSubjectDropdown')?.value || '綜合自習';
-            const totalMyMins = appState.sessions.reduce((acc, s) => acc + s.duration, 0);
+            const totalMySecs = appState.sessions.reduce((acc, s) => acc + (s.duration * 60), 0);
             
             const statusRef = rtdb.ref('online_users/' + currentUser.username);
             statusRef.set({
@@ -1391,9 +1414,12 @@
                 avatar: currentUser.avatar,
                 subject: subject,
                 status: statusText,
-                studyMins: totalMyMins,
+                activeSeconds: totalMySecs,
+                isStudying: isStudying,
+                sessionStartTime: isStudying ? (sessionStartTime || Date.now()) : null,
                 lastActive: Date.now()
             });
+            statusRef.onDisconnect().remove();
         }
 
         function sendChatMessage() {
@@ -1456,13 +1482,12 @@
             }
         }
 
-        /* ===== 計時器與遊戲化核心 (自動加入與隨時儲存) ===== */
+        /* ===== 計時器與遊戲化核心 (按下瞬間自動存檔與即時同步) ===== */
         function switchTimerMode(mode) {
             timerMode = mode;
             resetTimer();
             document.getElementById('modePomodoroBtn').classList.toggle('active', mode === 'pomodoro');
             document.getElementById('modeStopwatchBtn').classList.toggle('active', mode === 'stopwatch');
-            document.getElementById('stopwatchSaveBtn').style.display = mode === 'stopwatch' ? 'block' : 'none';
             document.getElementById('timerModeTag').innerText = mode === 'pomodoro' ? '⏳ 番茄鐘倒數' : '⏱️ 正向計時模式';
         }
 
@@ -1475,9 +1500,11 @@
         function toggleTimer() {
             if (!isRunning) {
                 isRunning = true;
+                sessionStartTime = Date.now();
                 document.getElementById('startTimerBtn').innerText = '暫停專注';
-                // 用戶在首頁按下開始按鈕時，自動加入讀書伺服器並更新狀態
-                updateOnlineStatusToServer('專注衝刺中 🔥');
+                
+                // 按下開始的瞬間立刻自動存檔/同步上線專注狀態
+                updateOnlineStatusToServer('專注衝刺中 🔥', true);
 
                 timerId = setInterval(() => {
                     if (timerMode === 'pomodoro') {
@@ -1497,33 +1524,40 @@
                         const s = (stopwatchSeconds % 60).toString().padStart(2, '0');
                         document.getElementById('timerDisplay').innerText = `${m}:${s}`;
                     }
+                    // 每秒發送心跳以維持線上即時秒數更新
+                    if (currentUser) {
+                        rtdb.ref('online_users/' + currentUser.username).update({ lastActive: Date.now() });
+                    }
                 }, 1000);
             } else {
                 clearInterval(timerId);
                 isRunning = false;
                 document.getElementById('startTimerBtn').innerText = '繼續專注';
-                updateOnlineStatusToServer('暫停中 ☕');
+                
+                // 暫停時自動結算與存檔正向計時時間
+                if (timerMode === 'stopwatch' && stopwatchSeconds >= 60) {
+                    const mins = Math.floor(stopwatchSeconds / 60);
+                    recordSession(mins, '正向計時');
+                    stopwatchSeconds = 0;
+                }
+                updateOnlineStatusToServer('暫停中 ☕', false);
             }
         }
 
         function resetTimer() {
+            // 若重設時正向計時已有累積時間，自動結算存檔
+            if (timerMode === 'stopwatch' && stopwatchSeconds >= 60) {
+                const mins = Math.floor(stopwatchSeconds / 60);
+                recordSession(mins, '正向計時');
+            }
             clearInterval(timerId);
             isRunning = false;
+            sessionStartTime = null;
             document.getElementById('startTimerBtn').innerText = '開始專注';
             timeLeft = appState.focusMins * 60;
             stopwatchSeconds = 0;
             updateTimerDisplay();
-            updateOnlineStatusToServer('休息中 🍵');
-        }
-
-        function stopAndSaveStopwatch() {
-            if (stopwatchSeconds < 60) {
-                alert('⚠️ 專注時間太短（少於1分鐘），不予記錄！');
-                return;
-            }
-            const mins = Math.floor(stopwatchSeconds / 60);
-            recordSession(mins, '正向計時');
-            resetTimer();
+            updateOnlineStatusToServer('休息中 🍵', false);
         }
 
         function recordSession(mins, mode) {
@@ -1540,12 +1574,10 @@
                 tag: noteTag || '專注研讀'
             });
 
-            // 隨時儲存個人讀書時長至 localStorage 與 Firebase 伺服器
             localStorage.setItem('aura_sessions', JSON.stringify(appState.sessions));
             addGamifyXP(mins);
             renderDashboard();
-            updateOnlineStatusToServer('專注讀書中 ⏱️');
-            alert(`✅ 成功記錄專注 ${mins} 分鐘！已同步至雲端伺服器！`);
+            updateOnlineStatusToServer('專注讀書中 ⏱️', false);
         }
 
         /* ===== 遊戲化與統計 ===== */
